@@ -2,18 +2,23 @@ ARG VERSION=3.11-slim
 
 FROM python:${VERSION} AS base
 
-RUN apt update && apt upgrade -y --fix-missing
-RUN apt install -y htop make gcc git vim nano curl wget zsh cntlm jq zip unzip
+RUN apt update && apt -y upgrade
+RUN apt install -y gcc cntlm htop
+RUN apt install -y make git vim nano
+RUN apt install -y curl wget jq zip unzip
 
 FROM base AS python
 
 SHELL ["/bin/bash", "-c"]
-RUN python3 -m venv ~/.venv && source ~/.venv/bin/activate && pip install --upgrade pip setuptools
+
+RUN python3 -m venv ~/.venv
+RUN source ~/.venv/bin/activate && pip install jupyterlab
 RUN source ~/.venv/bin/activate && pip install numpy pandas matplotlib scipy scikit-learn
 
 FROM python AS ta
 
 SHELL ["/bin/bash", "-c"]
+
 RUN wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
 RUN tar -xzf ta-lib-0.4.0-src.tar.gz && rm ta-lib-0.4.0-src.tar.gz
 RUN cd ta-lib && ./configure --build=$(arch)-unknown-linux-gnu && make && make install
@@ -22,17 +27,15 @@ RUN rm -r ta-lib
 FROM ta AS zipline
 
 SHELL ["/bin/bash", "-c"]
-RUN source ~/.venv/bin/activate && export DISABLE_BCOLZ_AVX2=true && export DISABLE_BCOLZ_SSE2=true && pip install git+https://github.com/stefan-jansen/bcolz-zipline.git@main
-RUN source ~/.venv/bin/activate && pip install zipline-reloaded alphalens-reloaded pyfolio-reloaded empyrical-reloaded
 
-FROM zipline AS jupyter
+RUN source ~/.venv/bin/activate && if [ "$(arch)" != "x86_64" ]; then export DISABLE_BCOLZ_AVX2=1 DISABLE_BCOLZ_SSE2=1; fi && pip install git+https://github.com/stefan-jansen/bcolz-zipline.git@main
+RUN source ~/.venv/bin/activate && pip install empyrical-reloaded alphalens-reloaded pyfolio-reloaded zipline-reloaded
 
-SHELL ["/bin/bash", "-c"]
-RUN source ~/.venv/bin/activate && pip install jupyterlab
+FROM zipline AS zsh
 
-FROM jupyter AS zsh
-
+RUN apt install -y zsh
 RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+
 ENV SHELL=/usr/bin/zsh
 
 FROM zsh AS scripts
